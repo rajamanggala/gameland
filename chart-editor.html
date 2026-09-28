@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gamelan Rhythm: Editor Chart</title>
+<style>
+  :root{
+    color-scheme:dark;
+    --bg:#0b0a1a; --panel:#171438e6; --line:#ffffff24; --txt:#f4f1ff; --dim:#a9a3d1;
+    --a:#5ee7ff; --b:#ff5fa2; --gold:#ffd84d; --violet:#a58bff; --ok:#3dffb0; --bad:#ff5c7a;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html{background:var(--bg)}
+  body{
+    margin:0; min-height:100vh; color:var(--txt);
+    font-family:"Segoe UI",system-ui,sans-serif;
+    background:radial-gradient(ellipse at 20% -10%,#2a1660 0,#0b0a1a 62%) fixed;
+    padding:28px 20px 40px;
+  }
+  .wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+  header{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
+  h1{
+    margin:0;font-size:clamp(1.9rem,5vw,2.8rem);font-style:italic;font-weight:800;line-height:1;letter-spacing:.02em;
+    background:linear-gradient(90deg,var(--a),var(--b));-webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  h2{margin:0;font-size:1.05rem;display:flex;align-items:center;gap:10px}
+  h2 .step{
+    display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;
+    background:linear-gradient(90deg,var(--a),var(--b));color:#0b0a1a;font-weight:800;font-size:.9rem;font-style:italic
+  }
+  .sub{color:var(--dim);font-size:.9rem;line-height:1.5;max-width:75ch}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:20px;
+    backdrop-filter:blur(8px);display:flex;flex-direction:column;gap:16px;transition:opacity .2s;
+  }
+  .panel.locked{opacity:.4;pointer-events:none}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  audio{width:100%;height:44px;border-radius:999px}
+
+  button{
+    font:inherit;cursor:pointer;border:0;border-radius:999px;padding:11px 22px;font-weight:800;
+    color:#0b0a1a;background:linear-gradient(90deg,var(--a),var(--b));
+    transition:transform .08s,filter .15s,background .15s;
+  }
+  button:hover{filter:brightness(1.08)}
+  button:active{transform:scale(.97)}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  button.g{background:#ffffff16;color:var(--txt);font-weight:600;padding:10px 18px;border:1px solid var(--line)}
+  button.g:hover{background:#ffffff26;filter:none}
+  button.danger{background:transparent;color:var(--bad);border:1px solid #ff5c7a80;font-weight:600;padding:10px 18px}
+  button.danger:hover{background:#ff5c7a1f;filter:none}
+  button:focus-visible,audio:focus-visible,input:focus-visible{outline:3px solid #fff;outline-offset:3px}
+
+  /* dropzone */
+  .drop{
+    display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;
+    padding:26px 16px;border:2px dashed var(--line);border-radius:16px;cursor:pointer;color:var(--dim);
+    transition:border-color .15s,background .15s;
+  }
+  .drop:hover,.drop.over{border-color:var(--a);background:#5ee7ff12}
+  .drop b{color:var(--txt);font-size:1.05rem}
+  .drop.ok{border-style:solid;border-color:var(--ok);color:var(--ok);padding:14px 16px;flex-direction:row;justify-content:center;flex-wrap:wrap}
+  .drop.ok b{color:var(--ok)}
+
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:.82rem;font-weight:600;color:var(--dim)}
+  .field input{
+    font:inherit;color:var(--txt);background:#ffffff0d;border:1px solid var(--line);border-radius:12px;padding:10px 14px;
+  }
+  .field .fn{font-size:.85rem;color:var(--dim);line-height:1.6}
+  .field .fn code{color:var(--gold);font-family:Consolas,monospace;font-size:.85rem}
+  .warn{
+    display:none;padding:10px 14px;border-radius:12px;background:#ffd84d18;border:1px solid #ffd84d66;
+    color:var(--gold);font-size:.85rem;line-height:1.5
+  }
+  .warn.on{display:block}
+
+  .time{
+    margin-left:auto;text-align:right;line-height:1;
+    font-size:clamp(1.8rem,5vw,2.6rem);font-weight:800;font-style:italic;font-variant-numeric:tabular-nums;
+    text-shadow:0 0 22px #5ee7ff66;
+  }
+  .time small{display:block;margin-bottom:4px;font-size:.7rem;font-style:normal;font-weight:700;color:var(--dim);letter-spacing:.06em}
+  .time .tot{font-size:.45em;color:var(--dim);text-shadow:none;font-style:normal;font-weight:600}
+
+  .notes{display:grid;grid-template-columns:repeat(8,1fr);gap:10px}
+  .note{
+    --c:var(--a);position:relative;overflow:hidden;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    padding:20px 4px 16px;border-radius:16px;background:#ffffff0d;border:1px solid var(--line);
+    color:var(--txt);font-weight:800;
+  }
+  .note::after{content:"";position:absolute;left:0;right:0;bottom:0;height:4px;background:var(--c);opacity:.9}
+  .note:hover{background:#ffffff1a;filter:none}
+  .note .n{font-size:1.9rem;line-height:1;font-style:italic}
+  .note .k{font-size:.72rem;font-weight:600;color:var(--dim)}
+  .note.hit{animation:hit .22s ease-out}
+  @keyframes hit{
+    0%{background:var(--c);color:#0b0a1a;transform:scale(.95);box-shadow:0 0 28px var(--c)}
+    100%{transform:scale(1)}
+  }
+  .hint{margin:0;color:var(--dim);font-size:.82rem;line-height:1.6}
+  kbd{font:inherit;font-size:.78rem;font-weight:700;padding:1px 8px;border-radius:6px;background:#ffffff16;border:1px solid var(--line);color:var(--txt)}
+
+  .count{color:var(--dim);font-size:.9rem}
+  .count b{color:var(--txt);font-size:1.15rem}
+  .tablebox{position:relative;max-height:min(46vh,420px);overflow:auto;border:1px solid var(--line);border-radius:14px}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:.9rem}
+  thead th{position:sticky;top:0;background:#1d1948;color:var(--dim);font-weight:600;font-size:.8rem;text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);z-index:1}
+  td{padding:8px 14px;border-bottom:1px solid #ffffff10}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#ffffff08}
+  tbody tr.new{animation:newrow 1s ease-out}
+  @keyframes newrow{from{background:#5ee7ff33}}
+  td.idx{color:var(--dim);width:64px}
+  td.tm{width:130px}
+  .pill{display:inline-flex;align-items:center;justify-content:center;min-width:34px;padding:2px 12px;border-radius:999px;font-weight:800;font-style:italic;color:#0b0a1a;background:var(--c)}
+  td.act{width:90px;text-align:right}
+  td.act button{padding:4px 12px;font-size:.78rem}
+  .empty{padding:26px 14px;text-align:center;color:var(--dim)}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+  .stat{padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:#ffffff08}
+  .stat small{display:block;color:var(--dim);font-size:.75rem;margin-bottom:4px}
+  .stat b{font-size:1.1rem;font-variant-numeric:tabular-nums}
+  .msg{min-height:1.3em;font-size:.88rem;color:var(--ok)}
+  .msg.err{color:var(--bad)}
+
+  footer{color:var(--dim);font-size:.78rem;text-align:center;margin-top:4px}
+
+  @media(max-width:640px){
+    body{padding:18px 12px 30px}
+    .notes{grid-template-columns:repeat(4,1fr)}
+    .time{margin-left:0;text-align:left;width:100%}
+  }
+  @media(prefers-reduced-motion:reduce){.note.hit,tbody tr.new{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Editor Chart</h1>
+    <div class="sub">Unggah backing track, putar, lalu tekan tombol nada tiap kali kamu mendengarnya. Hasilnya berupa file <b>nama_chart.json</b> yang siap ditaruh di folder <b>playlist/</b> bersama file mp3-nya.</div>
+  </header>
+
+  <!-- LANGKAH 1 -->
+  <section class="panel">
+    <h2><span class="step">1</span>Backing track</h2>
+
+    <div class="drop" id="drop" tabindex="0" role="button">
+      <b id="dropTitle">Pilih atau seret file audio ke sini</b>
+      <span id="dropSub">Disarankan .mp3, sama dengan yang nanti dipakai di game</span>
+    </div>
+    <input type="file" id="audioFile" accept="audio/*,.mp3" hidden>
+
+    <div class="warn" id="extWarn">File ini bukan .mp3. Game hanya memindai file <b>.mp3</b> di folder playlist/, jadi ubah dulu ke mp3 sebelum ditaruh di sana.</div>
+
+    <div class="field">
+      <div class="fn" id="fnHint">Nama file chart otomatis mengikuti nama file audio.</div>
+    </div>
+
+    <audio id="track" controls></audio>
+  </section>
+
+  <!-- LANGKAH 2 -->
+  <section class="panel locked" id="recPanel">
+    <h2><span class="step">2</span>Catat nada</h2>
+
+    <div class="row">
+      <button id="playBtn">▶ Putar</button>
+      <button id="backBtn" class="g">« Mundur 2 dtk</button>
+      <button id="undoBtn" class="g">↩ Hapus terakhir</button>
+      <div class="time"><small>WAKTU</small><span id="timeReadout">0:00.000</span> <span class="tot" id="durReadout">/ 0:00.000</span></div>
+    </div>
+
+    <div class="notes" id="notesGrid"></div>
+
+    <p class="hint">
+      Tombol nada dari rendah ke tinggi: 6̲, 1, 2, 3, 4, 5, 6, 7. Tekan kapan saja untuk mencatat pada waktu berjalan.
+      Pintasan: <kbd>1</kbd> sampai <kbd>8</kbd> mencatat nada, <kbd>Spasi</kbd> memutar atau menjeda, <kbd>Backspace</kbd> menghapus catatan terakhir.
+    </p>
+  </section>
+
+  <!-- LANGKAH 3 -->
+  <section class="panel locked" id="outPanel">
+    <h2><span class="step">3</span>Hasil dan simpan</h2>
+
+    <div class="stats">
+      <div class="stat"><small>Jumlah catatan</small><b id="sCount">0</b></div>
+      <div class="stat"><small>Catatan pertama</small><b id="sFirst">-</b></div>
+      <div class="stat"><small>Catatan terakhir</small><b id="sLast">-</b></div>
+      <div class="stat"><small>Durasi audio</small><b id="sDur">-</b></div>
+    </div>
+    <div class="warn" id="durWarn"></div>
+
+    <div class="tablebox" id="tableBox">
+      <table>
+        <thead><tr><th>#</th><th>Waktu</th><th>Nada</th><th></th></tr></thead>
+        <tbody id="notesBody"></tbody>
+      </table>
+      <div id="emptyMsg" class="empty">Belum ada catatan. Putar lagu dan tekan tombol nada.</div>
+    </div>
+
+    <div class="row">
+      <button id="exportBtn">⬇ Simpan <span id="exportName">_chart.json</span></button>
+      <button id="importBtn" class="g">⬆ Muat file chart</button>
+      <button id="clearBtn" class="danger" style="margin-left:auto">Hapus semua</button>
+      <input type="file" id="importFile" accept=".json" hidden>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div class="sub">Setelah disimpan, taruh <b id="fnMp3">nama.mp3</b> dan <b id="fnJson">nama_chart.json</b> di folder <b>playlist/</b>. Game akan menemukannya otomatis.</div>
+  </section>
+
+  <footer>Draf catatan tersimpan otomatis di browser ini, terpisah untuk tiap nama lagu.</footer>
+</div>
+
+<script>
+  const NOTES = [
+    {id:'6low', label:'6\u0332', file:'sampler/6down.wav'},
+    {id:'1',    label:'1',       file:'sampler/1.wav'},
+    {id:'2',    label:'2',       file:'sampler/2.wav'},
+    {id:'3',    label:'3',       file:'sampler/3.wav'},
+    {id:'4',    label:'4',       file:'sampler/4.wav'},
+    {id:'5',    label:'5',       file:'sampler/5.wav'},
+    {id:'6',    label:'6',       file:'sampler/6.wav'},
+    {id:'7',    label:'7',       file:'sampler/7.wav'},
+  ];
+  const COL = ['#5ee7ff','#ffd84d','#ff5fa2','#a58bff'];
+  const colorOf = i => COL[i % COL.length];
+  const NOTE_IDS = NOTES.map(n => n.id);
+  const END_PAD = 2.5; // sama dengan endT di index.html: game selesai 2,5 dtk setelah ketukan terakhir
+  const keyFor = name => 'gamelan_hero_chart_' + name + '_v2';
+
+  const $ = id => document.getElementById(id);
+  const track = $('track'), playBtn = $('playBtn'), backBtn = $('backBtn'), undoBtn = $('undoBtn');
+  const timeReadout = $('timeReadout'), durReadout = $('durReadout'), notesGrid = $('notesGrid'), notesBody = $('notesBody');
+  const emptyMsg = $('emptyMsg'), tableBox = $('tableBox');
+  const clearBtn = $('clearBtn'), exportBtn = $('exportBtn'), importBtn = $('importBtn'), importFile = $('importFile');
+  const drop = $('drop'), audioFile = $('audioFile');
+  const recPanel = $('recPanel'), outPanel = $('outPanel');
+
+  const sampleAudio = {};
+  NOTES.forEach(n => { sampleAudio[n.id] = new Audio(n.file); });
+
+  let chart = [];
+  let songName = '';
+  let hasAudio = false;
+
+  /* ---------- util ---------- */
+  function fmtTime(t) {
+    if (!isFinite(t)) return '-';
+    const m = Math.floor(t/60);
+    const s = (t%60).toFixed(3).padStart(6,'0');
+    return m + ':' + s;
+  }
+  const noteIndex = id => Math.max(0, NOTES.findIndex(n => n.id === id));
+  const cleanName = s => s.replace(/[\\\/:*?"<>|]/g, '');
+  const baseName = f => cleanName(f.replace(/\.[^.]+$/, '')).trim();
+
+  function setMsg(text, err) {
+    const m = $('msg'); m.textContent = text; m.classList.toggle('err', !!err);
+  }
+
+  /* ---------- simpan/muat draf per lagu ---------- */
+  function save() {
+    if (!songName) return;
+    try { localStorage.setItem(keyFor(songName), JSON.stringify(chart)); }
+    catch(e) { console.error('Gagal menyimpan', e); }
+  }
+  function loadDraft(name) {
+    try {
+      let saved = localStorage.getItem(keyFor(name));
+      if (!saved && name === 'gugurgunung') saved = localStorage.getItem('gamelan_hero_chart_gugurgunung_v1'); // draf versi lama
+      const arr = saved ? JSON.parse(saved) : [];
+      return sanitizeNotes(arr).notes;
+    } catch(e) { return []; }
+  }
+
+  function sanitizeNotes(arr) {
+    if (!Array.isArray(arr)) return {notes:[], dropped:0};
+    const ok = arr.filter(k => k && typeof k.time === 'number' && isFinite(k.time) && k.time >= 0 && NOTE_IDS.includes(String(k.note)))
+                  .map(k => ({time: Math.round(k.time*1000)/1000, note: String(k.note)}))
+                  .sort((a,b) => a.time - b.time);
+    return {notes: ok, dropped: arr.length - ok.length};
+  }
+
+  /* ---------- muat audio ---------- */
+  function loadAudioFile(file) {
+    if (!file) return;
+    if (!/^audio\//.test(file.type) && !/\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(file.name)) {
+      alert('File ini bukan audio.'); return;
+    }
+    track.pause();
+    if (track.src.startsWith('blob:')) URL.revokeObjectURL(track.src);
+    track.src = URL.createObjectURL(file);
+    track.load();
+    hasAudio = true;
+    $('extWarn').classList.toggle('on', !/\.mp3$/i.test(file.name));
+
+    songName = baseName(file.name) || 'lagu';
+    chart = loadDraft(songName);
+
+    drop.classList.add('ok');
+    $('dropTitle').textContent = '✓ ' + file.name;
+    $('dropSub').textContent = '(klik untuk ganti lagu)';
+
+    recPanel.classList.remove('locked');
+    outPanel.classList.remove('locked');
+    setMsg('');
+    refreshNames();
+    renderTable();
+    updateInfo();
+  }
+
+  drop.addEventListener('click', () => audioFile.click());
+  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); audioFile.click(); } });
+  audioFile.addEventListener('change', () => { loadAudioFile(audioFile.files[0]); audioFile.value = ''; });
+  ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => loadAudioFile(e.dataTransfer.files[0]));
+
+  track.addEventListener('loadedmetadata', () => {
+    durReadout.textContent = '/ ' + fmtTime(track.duration);
+    updateInfo();
+  });
+
+  /* ---------- nama lagu: otomatis dari nama file audio ---------- */
+  function refreshNames() {
+    const n = songName || 'nama';
+    $('exportName').textContent = n + '_chart.json';
+    $('fnJson').textContent = n + '_chart.json';
+    $('fnMp3').textContent = n + '.mp3';
+    $('fnHint').innerHTML = songName
+      ? 'Chart akan disimpan sebagai <code>' + n + '_chart.json</code>. Jangan ubah nama <code>' + n + '.mp3</code> saat ditaruh di playlist/, supaya cocok.'
+      : 'Nama file chart otomatis mengikuti nama file audio.';
+  }
+
+  /* ---------- pencatatan ---------- */
+  function flash(noteId) {
+    const b = noteBtns[noteId]; if (!b) return;
+    b.classList.remove('hit'); void b.offsetWidth; b.classList.add('hit');
+  }
+
+  function addNote(noteId) {
+    if (!hasAudio) return;
+    const entry = { time: Math.round(track.currentTime*1000)/1000, note: noteId };
+    chart.push(entry);
+    chart.sort((a,b) => a.time - b.time);
+    save();
+    renderTable(entry);
+    updateInfo();
+    flash(noteId);
+    sampleAudio[noteId].currentTime = 0;
+    sampleAudio[noteId].play().catch(()=>{});
+  }
+
+  function renderTable(highlight) {
+    notesBody.innerHTML = '';
+    emptyMsg.style.display = chart.length ? 'none' : 'block';
+    let target = null;
+    chart.forEach((n, i) => {
+      const ni = noteIndex(n.note), tr = document.createElement('tr');
+      const tdI = document.createElement('td'); tdI.className = 'idx'; tdI.textContent = i + 1;
+      const tdT = document.createElement('td'); tdT.className = 'tm'; tdT.textContent = fmtTime(n.time);
+      const tdN = document.createElement('td');
+      const pill = document.createElement('span'); pill.className = 'pill';
+      pill.style.setProperty('--c', colorOf(ni));
+      pill.textContent = NOTES[ni].label;
+      tdN.appendChild(pill);
+      const tdA = document.createElement('td'); tdA.className = 'act';
+      const del = document.createElement('button'); del.className = 'g del'; del.dataset.idx = i; del.textContent = 'Hapus';
+      tdA.appendChild(del);
+      tr.append(tdI, tdT, tdN, tdA);
+      if (highlight && n === highlight) { tr.classList.add('new'); target = tr; }
+      notesBody.appendChild(tr);
+    });
+    if (target) tableBox.scrollTop = target.offsetTop - tableBox.clientHeight / 2;
+  }
+
+  function updateInfo() {
+    $('sCount').textContent = chart.length;
+    $('sFirst').textContent = chart.length ? fmtTime(chart[0].time) : '-';
+    $('sLast').textContent = chart.length ? fmtTime(chart[chart.length-1].time) : '-';
+    const dur = track.duration;
+    $('sDur').textContent = isFinite(dur) ? fmtTime(dur) : '-';
+    const w = $('durWarn');
+    if (chart.length && isFinite(dur) && chart[chart.length-1].time > dur) {
+      w.textContent = 'Ada catatan yang waktunya melewati durasi audio. Periksa lagi, mungkin chart ini untuk lagu lain.';
+      w.classList.add('on');
+    } else if (chart.length) {
+      const end = chart[chart.length-1].time + END_PAD;
+      w.innerHTML = 'Di game, lagu selesai <b>' + END_PAD + ' dtk setelah catatan terakhir</b> (sekitar ' + fmtTime(end) + '), bukan di akhir file audio. Kalau ada bagian akhir lagu yang belum dicatat, tidak akan dimainkan.';
+      w.classList.add('on');
+    } else w.classList.remove('on');
+  }
+
+  notesBody.addEventListener('click', e => {
+    const b = e.target.closest('.del');
+    if (b) { chart.splice(Number(b.dataset.idx), 1); save(); renderTable(); updateInfo(); }
+  });
+
+  const noteBtns = {};
+  NOTES.forEach((n, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'note';
+    btn.style.setProperty('--c', colorOf(i));
+    const num = document.createElement('span'); num.className = 'n'; num.textContent = n.label;
+    const key = document.createElement('span'); key.className = 'k'; key.textContent = 'tombol ' + (i + 1);
+    btn.append(num, key);
+    btn.addEventListener('click', () => addNote(n.id));
+    notesGrid.appendChild(btn);
+    noteBtns[n.id] = btn;
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || !hasAudio) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const idx = Number(e.key) - 1;
+    if (e.key.length === 1 && idx >= 0 && idx < NOTES.length) { if (!e.repeat) addNote(NOTES[idx].id); return; }
+    if (e.code === 'Space') {
+      if (e.target.tagName === 'AUDIO' || e.target.tagName === 'BUTTON') return; // biarkan kontrol bawaan
+      e.preventDefault(); togglePlay();
+    }
+    if (e.key === 'Backspace') { e.preventDefault(); undoLast(); }
+  });
+
+  function togglePlay() { if (track.paused) track.play(); else track.pause(); }
+  playBtn.addEventListener('click', togglePlay);
+  track.addEventListener('play', () => playBtn.textContent = '⏸ Jeda');
+  track.addEventListener('pause', () => playBtn.textContent = '▶ Putar');
+  backBtn.addEventListener('click', () => { track.currentTime = Math.max(0, track.currentTime - 2); });
+
+  function undoLast() {
+    if (!chart.length) return;
+    chart.pop(); save(); renderTable(); updateInfo();
+  }
+  undoBtn.addEventListener('click', undoLast);
+
+  clearBtn.addEventListener('click', () => {
+    if (confirm('Hapus semua catatan? Tidak bisa dibatalkan.')) {
+      chart = []; save(); renderTable(); updateInfo(); setMsg('');
+    }
+  });
+
+  setInterval(() => { timeReadout.textContent = fmtTime(track.currentTime); }, 50);
+
+  /* ---------- ekspor: format sama persis dengan gugurgunung_chart.json ---------- */
+  async function exportChart() {
+    const name = songName.trim();
+    if (!name) { setMsg('Muat file audio dulu.', true); return; }
+    if (!chart.length) { setMsg('Belum ada catatan untuk disimpan.', true); return; }
+    const data = { song: name, notes: chart.map(n => ({ time: n.time, note: n.note })) };
+    const text = JSON.stringify(data, null, 2);
+    const fname = name + '_chart.json';
+
+    if (window.showSaveFilePicker) {
+      try {
+        const h = await window.showSaveFilePicker({
+          suggestedName: fname,
+          types: [{description:'Chart JSON', accept:{'application/json':['.json']}}]
+        });
+        const w = await h.createWritable(); await w.write(text); await w.close();
+        setMsg('Tersimpan sebagai ' + h.name + ' (' + chart.length + ' catatan).');
+        return;
+      } catch(e) {
+        if (e.name === 'AbortError') return;
+        console.warn('Simpan langsung gagal, pakai unduhan biasa', e);
+      }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type:'application/json'}));
+    a.download = fname;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    setMsg('Diunduh sebagai ' + fname + ' (' + chart.length + ' catatan). Pindahkan ke folder playlist/.');
+  }
+  exportBtn.addEventListener('click', exportChart);
+
+  /* ---------- impor ---------- */
+  importBtn.addEventListener('click', () => importFile.click());
+  importFile.addEventListener('change', () => {
+    const f = importFile.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(reader.result);
+        const r = sanitizeNotes(Array.isArray(data) ? data : data.notes);
+        if (!r.notes.length) throw new Error('kosong');
+        chart = r.notes;
+        save(); renderTable(); updateInfo();
+        setMsg('Memuat ' + chart.length + ' catatan' + (r.dropped ? ', ' + r.dropped + ' entri tidak valid diabaikan.' : '.'));
+      } catch(e) { setMsg('File chart tidak valid.', true); }
+    };
+    reader.readAsText(f);
+    importFile.value = '';
+  });
+
+  refreshNames();
+  renderTable();
+</script>
+</body>
+</html>
