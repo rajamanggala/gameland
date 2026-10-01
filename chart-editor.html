@@ -180,7 +180,7 @@
 
     <p class="hint">
       Tombol nada dari rendah ke tinggi: 6̲, 1, 2, 3, 4, 5, 6, 7. Tekan kapan saja untuk mencatat pada waktu berjalan.
-      Pintasan: <kbd>1</kbd> sampai <kbd>8</kbd> mencatat nada, <kbd>Spasi</kbd> memutar atau menjeda, <kbd>Backspace</kbd> menghapus catatan terakhir.
+      Pintasan: <kbd>1</kbd> sampai <kbd>7</kbd> mencatat nada 1 sampai 7, <kbd>Q</kbd> mencatat 6 rendah, <kbd>Spasi</kbd> memutar atau menjeda, <kbd>Backspace</kbd> menghapus catatan terakhir.
     </p>
   </section>
 
@@ -205,13 +205,13 @@
     </div>
 
     <div class="row">
-      <button id="exportBtn">⬇ Simpan <span id="exportName">_chart.json</span></button>
+      <button id="exportBtn">⬇ Simpan ke playlist <span id="exportName">_chart.json</span></button>
       <button id="importBtn" class="g">⬆ Muat file chart</button>
       <button id="clearBtn" class="danger" style="margin-left:auto">Hapus semua</button>
       <input type="file" id="importFile" accept=".json" hidden>
     </div>
     <div class="msg" id="msg"></div>
-    <div class="sub">Setelah disimpan, taruh <b id="fnMp3">nama.mp3</b> dan <b id="fnJson">nama_chart.json</b> di folder <b>playlist/</b>. Game akan menemukannya otomatis.</div>
+    <div class="sub">Saat disimpan, <b id="fnMp3">nama.mp3</b>, <b id="fnJson">nama_chart.json</b>, dan <b>daftar.js</b> langsung masuk ke folder <b>playlist/</b> secara otomatis.</div>
   </section>
 
   <footer>Draf catatan tersimpan otomatis di browser ini, terpisah untuk tiap nama lagu.</footer>
@@ -242,12 +242,45 @@
   const drop = $('drop'), audioFile = $('audioFile');
   const recPanel = $('recPanel'), outPanel = $('outPanel');
 
-  const sampleAudio = {};
+    const sampleAudio = {};   // cadangan bila Web Audio gagal
   NOTES.forEach(n => { sampleAudio[n.id] = new Audio(n.file); });
+
+  // Bunyi nada lewat Web Audio (jauh lebih cepat daripada <audio>)
+  const actx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  const sampleBuf = {};
+  function ambilBuffer(url) {
+    return new Promise((ok, gagal) => {
+      const x = new XMLHttpRequest();
+      x.open('GET', url); x.responseType = 'arraybuffer';
+      x.onload = () => (x.status === 0 || x.status === 200) ? ok(x.response) : gagal(new Error('HTTP ' + x.status));
+      x.onerror = () => gagal(new Error('gagal baca ' + url));
+      x.send();
+    });
+  }
+  NOTES.forEach(async n => {
+    try { sampleBuf[n.id] = await actx.decodeAudioData(await ambilBuffer(n.file)); }
+    catch (e) { console.warn('Sample belum termuat: ' + n.file, e); }
+  });
+  function bunyi(id) {
+    const b = sampleBuf[id];
+    if (!b) { const a = sampleAudio[id]; a.currentTime = 0; a.play().catch(() => {}); return; }  // cadangan
+    if (actx.state !== 'running') actx.resume();
+    const s = actx.createBufferSource(); s.buffer = b; s.connect(actx.destination); s.start();
+  }
 
   let chart = [];
   let songName = '';
   let hasAudio = false;
+  let audioFileObj = null;   // file audio asli yang dipilih, dikirim ke folder playlist/ saat simpan
+    // Jam halus: currentTime hanya naik sesekali, jadi ditambah waktu sejak perubahan terakhir
+  let lastCT = -1, lastP = 0;
+  function nowT(at) {
+    const c = track.currentTime;
+    if (c !== lastCT) { lastCT = c; lastP = performance.now(); }
+    if (track.paused) return c;
+    const el = ((at === undefined ? performance.now() : at) - lastP) / 1000;
+    return c + Math.max(0, Math.min(el, 0.05));
+  }
 
   /* ---------- util ---------- */
   function fmtTime(t) {
@@ -298,6 +331,7 @@
     track.src = URL.createObjectURL(file);
     track.load();
     hasAudio = true;
+    audioFileObj = file;
     $('extWarn').classList.toggle('on', !/\.mp3$/i.test(file.name));
 
     songName = baseName(file.name) || 'lagu';
@@ -344,17 +378,16 @@
     b.classList.remove('hit'); void b.offsetWidth; b.classList.add('hit');
   }
 
-  function addNote(noteId) {
+   function addNote(noteId, at) {
     if (!hasAudio) return;
-    const entry = { time: Math.round(track.currentTime*1000)/1000, note: noteId };
+    const entry = { time: Math.round(nowT(at)*1000)/1000, note: noteId };
+    bunyi(noteId);   // bunyi dulu, baru urusan tabel
     chart.push(entry);
     chart.sort((a,b) => a.time - b.time);
     save();
     renderTable(entry);
     updateInfo();
     flash(noteId);
-    sampleAudio[noteId].currentTime = 0;
-    sampleAudio[noteId].play().catch(()=>{});
   }
 
   function renderTable(highlight) {
@@ -402,15 +435,17 @@
     if (b) { chart.splice(Number(b.dataset.idx), 1); save(); renderTable(); updateInfo(); }
   });
 
+    // Tombol keyboard -> nada. Angka sama dengan nadanya, Q untuk 6 rendah.
+  const TOMBOL = {q:'6low', '1':'1', '2':'2', '3':'3', '4':'4', '5':'5', '6':'6', '7':'7'};
   const noteBtns = {};
   NOTES.forEach((n, i) => {
     const btn = document.createElement('button');
     btn.className = 'note';
     btn.style.setProperty('--c', colorOf(i));
     const num = document.createElement('span'); num.className = 'n'; num.textContent = n.label;
-    const key = document.createElement('span'); key.className = 'k'; key.textContent = 'tombol ' + (i + 1);
+    const key = document.createElement('span'); key.className = 'k'; key.textContent = 'tombol ' + (n.id === '6low' ? 'Q' : n.id);
     btn.append(num, key);
-    btn.addEventListener('click', () => addNote(n.id));
+    btn.addEventListener('click', e => addNote(n.id, e.timeStamp));
     notesGrid.appendChild(btn);
     noteBtns[n.id] = btn;
   });
@@ -418,8 +453,8 @@
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || !hasAudio) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-    const idx = Number(e.key) - 1;
-    if (e.key.length === 1 && idx >= 0 && idx < NOTES.length) { if (!e.repeat) addNote(NOTES[idx].id); return; }
+        const id = TOMBOL[e.key.toLowerCase()];
+    if (id) { if (!e.repeat) addNote(id, e.timeStamp); return; }
     if (e.code === 'Space') {
       if (e.target.tagName === 'AUDIO' || e.target.tagName === 'BUTTON') return; // biarkan kontrol bawaan
       e.preventDefault(); togglePlay();
@@ -445,9 +480,38 @@
     }
   });
 
-  setInterval(() => { timeReadout.textContent = fmtTime(track.currentTime); }, 50);
+    function loopWaktu() {
+    timeReadout.textContent = fmtTime(nowT());   // sekaligus menjaga jam halus tetap segar
+    requestAnimationFrame(loopWaktu);
+  }
+  requestAnimationFrame(loopWaktu);
 
   /* ---------- ekspor: format sama persis dengan gugurgunung_chart.json ---------- */
+  // Mode Electron (npm run editor): mp3 + chart.json + daftar.js langsung masuk playlist/, tanpa dialog
+  async function simpanKePlaylist(name, data) {
+    if (!audioFileObj) { setMsg('Muat file audio dulu.', true); return; }
+    if (!/\.mp3$/i.test(audioFileObj.name)) {
+      setMsg('File audio harus .mp3 agar bisa masuk playlist/. Ubah dulu ke mp3, lalu muat ulang.', true);
+      return;
+    }
+    exportBtn.disabled = true;
+    setMsg('Menyimpan ke folder playlist/ ...');
+    try {
+      const mp3 = await audioFileObj.arrayBuffer();
+      let r = await window.gamelan.simpanLagu({ nama: name, chart: data, mp3: mp3, timpa: false });
+      if (r && r.ada) {
+        if (!confirm('Lagu "' + name + '" sudah ada di playlist/. Timpa dengan yang baru?')) { setMsg('Dibatalkan.'); return; }
+        r = await window.gamelan.simpanLagu({ nama: name, chart: data, mp3: mp3, timpa: true });
+      }
+      if (r && r.ok) setMsg('Tersimpan di playlist/: ' + r.id + '.mp3, ' + r.id + '_chart.json, dan daftar.js diperbarui (' + chart.length + ' catatan).');
+      else setMsg((r && r.pesan) || 'Gagal menyimpan.', true);
+    } catch (e) {
+      setMsg('Gagal menyimpan: ' + e.message, true);
+    } finally {
+      exportBtn.disabled = false;
+    }
+  }
+
   async function exportChart() {
     const name = songName.trim();
     if (!name) { setMsg('Muat file audio dulu.', true); return; }
@@ -455,6 +519,8 @@
     const data = { song: name, notes: chart.map(n => ({ time: n.time, note: n.note })) };
     const text = JSON.stringify(data, null, 2);
     const fname = name + '_chart.json';
+
+    if (window.gamelan && window.gamelan.simpanLagu) { await simpanKePlaylist(name, data); return; }
 
     if (window.showSaveFilePicker) {
       try {

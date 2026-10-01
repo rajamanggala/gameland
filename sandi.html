@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<title>Keluar</title>
+<style>
+  html,body{margin:0;height:100%;}
+  body{
+    box-sizing:border-box; padding:24px; display:flex; flex-direction:column; gap:12px;
+    background:#171438; color:#f4f1ff; font-family:"Segoe UI",system-ui,sans-serif;
+    border:1px solid #ffffff30; user-select:none;
+  }
+  h2{margin:0; font-size:20px;}
+  input{
+    padding:11px 12px; font-size:18px; border-radius:8px; user-select:text;
+    border:1px solid #ffffff40; background:#0b0a1a; color:#f4f1ff;
+  }
+  #pesan{min-height:18px; font-size:14px; font-weight:600; color:#ff5fa2;}
+  .aksi{display:flex; gap:10px;}
+  button{
+    font:inherit; font-weight:800; cursor:pointer; border:0; border-radius:999px;
+    padding:10px 22px; color:#0b0a1a; background:linear-gradient(90deg,#5ee7ff,#ff5fa2);
+  }
+  button.abu{background:#ffffff16; color:#f4f1ff; border:1px solid #ffffff30; font-weight:600;}
+</style>
+</head>
+<body>
+  <h2>Keluar dari game</h2>
+  <div>Masukkan kata sandi pengelola</div>
+  <input id="isi" type="password" autocomplete="off" autofocus>
+  <div id="pesan"></div>
+  <div class="aksi">
+    <button id="ok">Keluar</button>
+    <button id="batal" class="abu">Batal</button>
+  </div>
+<script>
+  const $ = id => document.getElementById(id);
+  async function kirim(){
+    const r = await window.sandi.cek($('isi').value);
+    if (r.ok) return;                       // berhasil: aplikasi menutup sendiri
+    $('isi').value = '';
+    $('pesan').textContent = r.pesan;
+    $('isi').focus();
+  }
+  $('ok').addEventListener('click', kirim);
+  $('batal').addEventListener('click', () => window.sandi.batal());
+  $('isi').addEventListener('keydown', e => {
+    if (e.key === 'Enter') kirim();
+    else if (e.key === 'Escape') window.sandi.batal();
+  });
+</script>
+</body>
+</html>

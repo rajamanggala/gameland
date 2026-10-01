@@ -1,0 +1,14 @@
+{
+  "name": "gameland",
+  "version": "1.0.0",
+  "description": "Gamelan Rhythm - game ritme gamelan",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "jendela": "electron . --jendela",
+    "editor": "electron . --editor"
+  },
+  "devDependencies": {
+    "electron": "^41.7.1"
+  }
+}
